@@ -1,0 +1,10 @@
+type	abund.dorm	abund.act
+green	12	0
+red	3	19
+royal.blue	13	0
+purple	8	0
+dark.orange	3	11
+light.blue	10	0
+yellow	3	21
+light.orange	2	11
+dark.blue	1	0
