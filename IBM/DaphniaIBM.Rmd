@@ -1,0 +1,238 @@
+---
+title: "Seed Theory"
+author: "Jay T. Lennon"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+header-includes:
+   - \usepackage{array}
+output: pdf_document
+geometry: margin=2.54cm
+---
+
+###  Non-spatial individual-based simulation of population dynamics in Daphnia
+### https://cran.r-project.org/web/packages/simecol/vignettes/a-simecol-introduction.pdf
+
+## Clear workspace and set directory
+```{r setup}
+rm(list=ls())
+getwd()
+setwd("~/GitHub/seedtheory")
+```
+
+
+## Load packages and functions
+```{r}
+require("png")
+require("dplyr")
+require("grid")
+require("simecol")
+```
+
+
+## Part 1: main equation, parameters, initial values, time steps & solver
+
+```{r}
+# Class definition
+setClass("indbasedModel", 
+         representation(
+           parms  = "list",
+           init   = "data.frame"
+           ),
+         contains = "simObj"
+         )
+
+# Main equation and parameters
+ibm_daphnia <- new("indbasedModel", 
+        main = function(time, init, parms) {
+          init <- live(init, parms)
+          init <- survive(init, parms)
+          init <- hatch(init, parms)
+          init
+          },
+        parms = list(
+          
+          # parameters of the somatic growth equation
+          a1 = 1.167,    # (mm)
+          a2 = 0.573,    # (mg L^-1)
+          a3 = 1.420,    # (mm)
+          a4 = 2.397,    # (d),
+          b1 = 1.089e-2, # (d^-1)
+          b2 = 0.122,    # ((deg. C)^-1)
+          
+          # parameters of the clutch size equation
+          X_max_slope = 23.83,    # (eggs)
+          K_s_slope   = 0.65,     # (mg L^-1)
+          beta_min    = -29.28,   # (eggs)
+          u_c         = 1,        # (L mg^-1) unit conversion factor
+          
+          # parameters of the individual-based model
+          L_0_Hall    = 0.35,     # (mm) SON (size of neonates) of Hall data
+          L_0         = 0.65,     # (mm) SON
+          SAM         = 1.50,     # (mm) SAM (size at maturity)
+          maxage      = 60,       # (d)
+          
+          # constant environmental conditions
+          temp        = 20,       # (deg C)
+          food        = 0.5       # (mg L^-1)
+          ),
+
+        # initial conditions        
+        init      = data.frame(age = 0, size = 0.65, eggs = 0, eggage = 0),
+        
+        # time steps
+        times     = c(from = 0, to = 60, by = 1),
+        
+        # solver
+        solver    = "myiteration", # or default method: "iteration"
+        equations = list()
+        )
+```
+
+## Part 2: Equations and algorithms
+
+```{r}
+equations(ibm_daphnia) <- list(
+  newdaphnia = function(SON, n) {
+    if (n>0) {
+      data.frame(age = rep(0, n), size = SON, eggs = 0, eggage = 0)
+      } else {
+        NULL
+        }
+    },
+  
+  bottrell = function(temp) {
+    exp(3.3956 + 0.2193 * log(temp) - 0.3414 * log(temp)^2)
+    },
+  
+  tefi = function(time, temp, food, parms)
+    {with(parms, {
+      deltaL <- L_0 - L_0_Hall
+      k      <- b1 * exp(b2 * temp)
+      L_max  <- (a1 * food)/(a2 + food) + a3 - k * a4
+      L      <- L_max - (L_max - L_0_Hall) * exp (-k * time) + deltaL
+      E      <- (X_max_slope * food)/(K_s_slope + food) * L +
+                  beta_min * (1 - exp(-u_c * food))
+      as.data.frame(cbind(L, E))
+    })},
+  
+    live = function(inds, parms){
+      with(parms,{
+        ninds       <- nrow(inds)
+        inds$age    <- inds$age + DELTAT
+        inds$eggage <- ifelse(inds$size > SAM & inds$eggs > 0,
+                              inds$eggage + DELTAT, 0)
+        tefi_out    <- tefi(inds$age, temp, food, parms)
+        inds$size   <- tefi_out$L
+        neweggs     <- round(tefi_out$E)
+        inds$eggs   <- ifelse(inds$size > SAM & inds$eggage==0,
+                              neweggs, inds$eggs)
+        inds
+        })},
+  
+    survive  = function(inds, parms) subset(inds, inds$age < parms$maxage),
+  
+    hatch = function(inds, parms) {
+    newinds <- NULL
+    with(parms, {
+      edt       <- bottrell(temp)
+      have.neo  <- which(inds$eggs > 0 & inds$eggage > edt)
+      eggs      <- inds$eggs[have.neo]
+      new.neo   <- sum(eggs)
+      inds$eggs[have.neo]  <-  inds$eggage[have.neo] <- 0
+      newinds <- newdaphnia(L_0, new.neo)
+      rbind(inds, newinds)
+      })
+    }
+  )
+```
+
+## Part 3: Solver function and plot method
+
+```{r}
+## a more appropriate solver (note the observer function
+myiteration <- function(y, times = NULL, func = NULL, parms = NULL,
+                        animate=FALSE, ...) {
+  observer <- function(res) {
+    # eggs, size, age, eggage
+    number   <- nrow(res)
+    meansize <- mean(res$size)
+    meanage  <- mean(res$age)
+    meaneggs <- mean(res$eggs)
+    c(number = number, meansize = meansize, meanage = meanage, meaneggs = meaneggs)
+
+  }
+  init              <- y@init
+  times             <- fromtoby(y@times)
+  func              <- y@main
+  parms             <- y@parms
+  inputs            <- y@inputs
+  equations         <- y@equations
+  equations         <- addtoenv(equations)
+  environment(func) <- environment()
+  parms$DELTAT <- 0
+  res <- observer(init)
+  out <- res
+  for (i in 2:length(times)) {
+    time <- times[i]
+    parms$DELTAT <- times[i] - times[i-1]
+    init <- func(time, init, parms)
+    res  <- observer(init)
+    out  <- rbind(out, res)
+   }
+ row.names(out) <- NULL
+ out <- cbind(times, out)
+ as.data.frame(out)
+}
+
+## a plotting function that matches the output structure of the observer
+setMethod("plot", c("indbasedModel", "missing"), function(x, y, ...) {
+  o <- out(x)
+  par(mfrow=c(2, 2))
+  plot(o$times, o$meanage,  type="l", xlab="Time", ylab="Mean age (d)")
+  plot(o$times, o$meaneggs, type="l", xlab="Time", ylab="Eggs per indiv.")
+  plot(o$times, o$number,   type="l", xlab="Time", ylab="Abundance")
+  plot(o$times, o$number, type="l", xlab="Time", ylab="Abundance", log="y")
+})
+
+## RUN the MODEL ##
+solver(ibm_daphnia) <- "myiteration"
+ibm_daphnia <- sim(ibm_daphnia)
+plot(ibm_daphnia)  
+```  
+
+## Mortality scenarios
+
+```{r}
+# At the first step we create one clone of the daphnia_ibm-object, assign settings common to
+# all scenarios and an initial sample population
+Sc0 <- ibm_daphnia # no mortality
+times(Sc0) <- c(from = 0, to = 30, by = 0.2)
+parms(Sc0)[c("temp", "food", "mort")] <- c(15, 0.4, 0.1)
+init(Sc0) <- data.frame(age=rep(10, 50), size = rep(2.5, 50),
+ eggs=rep(5, 50), eggage=runif(50, 0, 4))
+  
+# Then we replace the default survive-function with a more general one which depends on a
+# user-specified mortality function fmort:
+equations(Sc0)$survive = function(inds, parms) {
+ abundance <- nrow(inds)
+ rnd <- runif(abundance)
+ mort <- fmort(parms$mort, inds$size) * parms$DELTAT
+ subset(inds, rnd > mort)
+}
+
+# Copies of object Sc0 are created and modified according to the scenario specification. In the
+# example below we have two functions with constant mortality and two other functions where
+# per capita mortality is higher for the larger or smaller individuals, respectively:
+
+Sc1 <- Sc2 <- Sc3 <- Sc0
+equations(Sc0)$fmort <- function(mort, x) 0
+equations(Sc1)$fmort <- function(mort, x) mort
+equations(Sc2)$fmort <- function(mort, x){
+ mort * 2 * rank(-x) / (length(x) + 1)
+ }
+equations(Sc3)$fmort <- function(mort, x){
+ mort * 2 * rank(x) / (length(x) + 1)
+ }
+
+# Finally, scenarios simulated, either line by line (Section 4.2) or listwise with lapply:
+
+sc <- lapply(list(Sc0=Sc0, Sc1=Sc1, Sc2=Sc2, Sc3=Sc3), sim)

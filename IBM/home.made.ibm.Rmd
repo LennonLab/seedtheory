@@ -1,0 +1,253 @@
+---
+title: "Seed Theory"
+author: "Jay T. Lennon"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+header-includes:
+   - \usepackage{array}
+output: pdf_document
+geometry: margin=2.54cm
+---
+
+# Simulations of susceptible and exposed individuals to virus (Video 1)
+https://www.youtube.com/watch?v=l-fldSZMXNc&t=4s
+
+```{r}
+# Initialize first agents status and mixing ratio with others
+Agent1 <- data.frame(AgentNo = 1, 
+                     State = "E", 
+                     Mixing = runif(1,0,1))
+
+# Define number of agents
+nPop1 <- 10
+
+# Create population of agents
+for (i in 2:nPop1){
+  Agent2 <- data.frame( AgentNo = i,
+                        State = "S",
+                        Mixing = runif(1,0,1) )
+  Agent1 <- rbind(Agent1, Agent2)
+}
+
+print(Agent1)
+```
+
+# Simulate change in exposure status based on mixing (video 2)
+```{r}
+for( i in 1:nPop1 ){
+  # Determine if they like to meet others
+  Mix1 <- Agent1$Mixing[ i ]
+  # How many agents will they meet?
+  Meet1 <- round(Mix1* 9, 0)
+  #Grab the agents they will meet
+  Meet2 <- sample( 1:nPop1, Meet1, replace = TRUE)
+  for(j in 1:length(Meet2) ){
+    # Grab who they will meet
+    Meet1a <- Agent1[ Meet2[j], ] # perhaps there's a problem here?
+    # If exposed, change State
+    if( Meet1a$State == "E" ){ # there's an error here with if statement
+      Agent1$State[i] <- "E"
+    }
+  }
+}
+
+print(Agent1)
+```
+
+# Simulate change in exposure status based on mixing (video 3)
+```{r}
+for( i in 1:nPop1 ){
+  # Determine if they like to meet others
+  Mix1 <- Agent1$Mixing[ i ]
+  # How many agents will they meet? +1 ensures everyone meets someone/everyone
+  Meet1 <- round(Mix1* 3, 0) + 1
+  #Grab the agents they will meet
+  Meet2 <- sample( 1:nPop1, 
+                   Meet1, 
+                   replace = TRUE,
+                   prob = Agent1$Mixing)
+  for(j in 1:length(Meet2) ){
+    # Grab who they will meet
+    Meet1a <- Agent1[ Meet2[j], ] 
+    # If exposed, change State
+    if( Meet1a$State == "E" ){ 
+      Urand1 <- runif(1,0,1)
+      if (Urand1 < 0.5){ # if Urand1 is less than 0.5, they will become exposed
+      Agent1$State[i] <- "E"
+    }
+  }
+  }
+}
+
+print(Agent1)
+```
+
+# How to summarize findings (video 4)
+```{r}
+Agent1 <- data.frame(AgentNo = 1, 
+                     State = "E", 
+                     Mixing = runif(1,0,1))
+
+# Define number of agents
+nPop1 <- 100
+
+# Create population of agents
+for (i in 2:nPop1){
+  Agent2 <- data.frame( AgentNo = i,
+                        State = "S",
+                        Mixing = runif(1,0,1) )
+  Agent1 <- rbind(Agent1, Agent2)
+}
+
+print(Agent1)
+
+for( i in 1:nPop1 ){
+  # Determine if they like to meet others
+  Mix1 <- Agent1$Mixing[ i ]
+  # How many agents will they meet? +1 ensures everyone meets someone/everyone
+  Meet1 <- round(Mix1* 3, 0) + 1
+  #Grab the agents they will meet
+  Meet2 <- sample( 1:nPop1, 
+                   Meet1, 
+                   replace = TRUE,
+                   prob = Agent1$Mixing)
+  for(j in 1:length(Meet2) ){
+    # Grab who they will meet
+    Meet1a <- Agent1[ Meet2[j], ] 
+    # If exposed, change State
+    if( Meet1a$State == "E" ){ 
+      Urand1 <- runif(1,0,1)
+      if (Urand1 < 0.5){ # if Urand1 is less than 0.5, they will become exposed
+      Agent1$State[i] <- "E"
+    }
+  }
+  }
+}
+
+print(Agent1)
+
+#summarize with table
+table (Agent1$State)
+
+
+Agent1[ Agent1$State == "S", ]
+```
+
+
+# Track through multiple iternations, i.e., time (video 5)
+```{r}
+Agent1 <- data.frame(AgentNo = 1, 
+                     State = "E", 
+                     Mixing = runif(1,0,1))
+
+# Define number of agents
+nPop1 <- 100
+
+# Create population of agents
+for (i in 2:nPop1){
+  Agent2 <- data.frame( AgentNo = i,
+                        State = "S",
+                        Mixing = runif(1,0,1) )
+  Agent1 <- rbind(Agent1, Agent2)
+}
+print(Agent1)
+
+####
+nTime1 <- 10 # how far to run model forward
+Out1 <- matrix( 0, ncol = 2, nrow = nTime1)
+
+# Move people through time
+for( k in 1:nTime1){
+
+for( i in 1:nPop1 ){
+  # Determine if they like to meet others
+  Mix1 <- Agent1$Mixing[ i ]
+  # How many agents will they meet? +1 ensures everyone meets someone/everyone
+  Meet1 <- round(Mix1* 3, 0) + 1
+  #Grab the agents they will meet
+  Meet2 <- sample( 1:nPop1, 
+                   Meet1, 
+                   replace = TRUE,
+                   prob = Agent1$Mixing)
+  for(j in 1:length(Meet2) ){
+    # Grab who they will meet
+    Meet1a <- Agent1[ Meet2[j], ] 
+    # If exposed, change State
+    if( Meet1a$State == "E" ){ 
+      Urand1 <- runif(1,0,1)
+      if (Urand1 < 0.5){ # if Urand1 is less than 0.5, they will become exposed
+      Agent1$State[i] <- "E"
+    }
+  }
+  }
+}
+
+Out1[k,] <- table( Agent1$State)
+}
+
+# shows how exposure increases over time
+print(Out1) 
+```
+
+
+
+# Track through multiple iternations, i.e., time (video 6)
+```{r}
+Agent1 <- data.frame(AgentNo = 1, 
+                     State = "E", 
+                     Mixing = runif(1,0,1))
+
+# Define number of agents
+nPop1 <- 10
+
+# Create population of agents
+for (i in 2:nPop1){
+  Agent2 <- data.frame( AgentNo = i,
+                        State = "S",
+                        Mixing = runif(1,0,1) )
+  Agent1 <- rbind(Agent1, Agent2)
+}
+print(Agent1)
+
+####
+nTime1 <- 10 # how far to run model forward
+Out1 <- data.frame( S = rep(0, nTime1),
+                    E = rep(0, nTime1),
+                    I = rep(0, nTime1),
+                    D = rep(0, nTime1))
+
+# Move people through time
+for( k in 1:nTime1){
+
+for( i in 1:nPop1 ){
+  # Determine if they like to meet others
+  Mix1 <- Agent1$Mixing[ i ]
+  # How many agents will they meet? +1 ensures everyone meets someone/everyone
+  Meet1 <- round(Mix1* 3, 0) + 1
+  #Grab the agents they will meet
+  Meet2 <- sample( 1:nPop1, 
+                   Meet1, 
+                   replace = TRUE,
+                   prob = Agent1$Mixing)
+  for(j in 1:length(Meet2) ){
+    # Grab who they will meet
+    Meet1a <- Agent1[ Meet2[j], ] 
+    # If exposed, change State
+    if( Meet1a$State == "E" ){ 
+      Urand1 <- runif(1,0,1)
+      if (Urand1 < 0.5){ # if Urand1 is less than 0.5, they will become exposed
+      Agent1$State[i] <- "E"
+    }
+  }
+  }
+}
+
+Out1$S[k] <- length(Agent1$State[Agent1$State == "S"])
+Out1$E[k] <- length(Agent1$State[Agent1$State == "E"])
+Out1$I[k] <- length(Agent1$State[Agent1$State == "I"])
+Out1$R[k] <- length(Agent1$State[Agent1$State == "R"])
+Out1$D[k] <- length(Agent1$State[Agent1$State == "D"])
+}
+
+# shows how exposure increases over time
+print(Out1) 
+```
